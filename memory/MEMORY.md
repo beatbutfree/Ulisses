@@ -1,3 +1,5 @@
 - [Project venv (uv)](project_venv.md) — venv at .venv/, managed with uv; use `.venv/bin/python -m pytest tests/ -v`
 - [Wazuh Indexer client architecture](project_wazuh_indexer.md) — query via OpenSearch SDK port 9200, not Wazuh REST port 55000; default index wazuh-archives-*
 - [Foundational skills architecture](project_foundational_skills.md) — QueryBuilderSkill + QueryExecutorSkill; not in SkillRegistry; InMemoryTemplateStore swapped for ChromaDB in Step 6
+- [Analysis skills design decisions](project_analysis_skills_design.md) — one skill per decoder.name; explicit _note for absent fields; aggregated output; DI via constructor
+- [Step 4 implementation](project_step4_analysis_skills.md) — 3 Windows skills built; registry→instance-based; executor now exposes aggregations; wiring instructions for Step 5

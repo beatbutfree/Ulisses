@@ -1,7 +1,9 @@
 """QueryExecutorSkill — runs a DSL JSON string against the Wazuh Indexer.
 
 Validates the incoming DSL JSON string, executes it via ``WazuhIndexerClient``,
-and returns the cleaned hits in ``SkillResult.data``.
+and returns cleaned hits **and** raw aggregations in ``SkillResult.data``.
+
+Pass ``size=0`` in context for aggregation-only queries (analysis skills).
 
 This skill is **not** registered in ``SkillRegistry`` — it requires constructor
 injection and is wired up directly by the agent loop in Step 5.
@@ -15,33 +17,36 @@ from opensearchpy.exceptions import TransportError
 
 from skills.base import InputType, Skill, SkillResult
 from wazuh.client import DEFAULT_INDEX, WazuhIndexerClient
+from wazuh.parser import parse_hits
 
 
 class QueryExecutorSkill(Skill):
-    """Execute a validated OpenSearch DSL JSON string and return cleaned hits.
+    """Execute a validated OpenSearch DSL JSON string and return results.
 
     ``value`` — DSL JSON string produced by ``QueryBuilderSkill``.
 
     Optional context keys:
 
-    - ``"index"``  (str)  — override the default ``wazuh-archives-*`` index.
-    - ``"size"``   (int)  — max hits to return (default 100).
-    - ``"keep_full_log"`` (bool) — pass ``True`` to retain raw ``full_log``
-      strings in each hit (default ``False``).
+    - ``"index"``        (str)  — override the default ``wazuh-archives-*`` index.
+    - ``"size"``         (int)  — max hits to return; use ``0`` for aggregation
+                                  queries (default 100).
+    - ``"keep_full_log"`` (bool) — retain raw ``full_log`` strings in hits
+                                   (default ``False``).
 
     On success ``SkillResult.data`` contains::
 
         {
-            "hits":     [ ... ],   # cleaned _source dicts
-            "total":    <int>,     # total matches in OpenSearch
-            "took_ms":  <int>
+            "hits":         [ ... ],   # cleaned _source dicts (empty when size=0)
+            "total":        <int>,     # total matching documents
+            "took_ms":      <int>,
+            "aggregations": { ... }    # raw OpenSearch aggregation result (may be {})
         }
     """
 
     name: str = "query_executor"
     description: str = (
         "Validates and executes an OpenSearch DSL JSON string against the "
-        "Wazuh Indexer, returning cleaned hits."
+        "Wazuh Indexer, returning cleaned hits and aggregations."
     )
     input_type: InputType = InputType.QUERY_DSL
 
@@ -63,8 +68,8 @@ class QueryExecutorSkill(Skill):
                      ``"keep_full_log"``.
 
         Returns:
-            Successful ``SkillResult`` with hits, or a failed result on
-            invalid JSON or indexer errors.
+            Successful ``SkillResult`` with hits + aggregations, or a failed
+            result on invalid JSON or indexer errors.
         """
         # --- Validate DSL JSON -----------------------------------------------
         try:
@@ -83,21 +88,22 @@ class QueryExecutorSkill(Skill):
         keep_full_log: bool = bool(context.get("keep_full_log", False))
 
         try:
-            parsed = self._client.query(
-                dsl, index=index, size=size, keep_full_log=keep_full_log
-            )
+            raw = self._client.execute_query(dsl, index=index, size=size)
         except OSConnectionError as exc:
             return SkillResult.fail(f"Indexer unreachable: {exc}")
         except TransportError as exc:
             return SkillResult.fail(f"Query execution failed: {exc}")
 
+        parsed = parse_hits(raw, keep_full_log=keep_full_log)
+        aggregations: dict[str, Any] = raw.get("aggregations", {})
+
         # --- Summarise -------------------------------------------------------
-        if parsed.is_empty():
+        if parsed.total == 0:
             summary = "Query returned no results."
         else:
             summary = (
-                f"Query returned {len(parsed.hits)} hit(s) "
-                f"(total: {parsed.total}) in {parsed.took_ms} ms."
+                f"Query matched {parsed.total} document(s), "
+                f"{len(parsed.hits)} returned, in {parsed.took_ms} ms."
             )
 
         return SkillResult(
@@ -105,6 +111,7 @@ class QueryExecutorSkill(Skill):
                 "hits": parsed.hits,
                 "total": parsed.total,
                 "took_ms": parsed.took_ms,
+                "aggregations": aggregations,
             },
             summary=summary,
             success=True,

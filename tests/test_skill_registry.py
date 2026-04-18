@@ -1,4 +1,4 @@
-"""Tests for skills/registry.py — SkillRegistry singleton."""
+"""Tests for skills/registry.py — SkillRegistry singleton (instance-based)."""
 
 import pytest
 from skills.base import InputType, Skill, SkillResult
@@ -62,10 +62,11 @@ def test_singleton_same_instance():
 
 
 def test_singleton_shared_state():
+    skill = _FakeIPSkill()
     r1 = SkillRegistry()
-    r1.register(_FakeIPSkill)
+    r1.register(skill)
     r2 = SkillRegistry()
-    assert r2.get("fake_ip") is _FakeIPSkill
+    assert r2.get("fake_ip") is skill
 
 
 # ---------------------------------------------------------------------------
@@ -74,17 +75,20 @@ def test_singleton_shared_state():
 
 
 def test_register_and_get():
+    skill = _FakeIPSkill()
     r = SkillRegistry()
-    r.register(_FakeIPSkill)
-    assert r.get("fake_ip") is _FakeIPSkill
+    r.register(skill)
+    assert r.get("fake_ip") is skill
 
 
 def test_register_multiple_skills():
+    ip = _FakeIPSkill()
+    user = _FakeUserSkill()
     r = SkillRegistry()
-    r.register(_FakeIPSkill)
-    r.register(_FakeUserSkill)
-    assert r.get("fake_ip") is _FakeIPSkill
-    assert r.get("fake_user") is _FakeUserSkill
+    r.register(ip)
+    r.register(user)
+    assert r.get("fake_ip") is ip
+    assert r.get("fake_user") is user
 
 
 def test_register_overwrites_same_name():
@@ -98,10 +102,12 @@ def test_register_overwrites_same_name():
         def _run(self, value: str, context: dict) -> SkillResult:
             return SkillResult(data={}, summary="alt", success=True)
 
+    original = _FakeIPSkill()
+    alt = _Alt()
     r = SkillRegistry()
-    r.register(_FakeIPSkill)
-    r.register(_Alt)
-    assert r.get("fake_ip") is _Alt
+    r.register(original)
+    r.register(alt)
+    assert r.get("fake_ip") is alt
 
 
 def test_register_without_name_raises():
@@ -114,7 +120,7 @@ def test_register_without_name_raises():
 
     r = SkillRegistry()
     with pytest.raises(ValueError, match="name"):
-        r.register(_NoName)
+        r.register(_NoName())
 
 
 # ---------------------------------------------------------------------------
@@ -133,15 +139,18 @@ def test_get_unknown_returns_none():
 
 
 def test_get_by_input_type_returns_matching_skills():
+    ip = _FakeIPSkill()
+    user = _FakeUserSkill()
+    rule = _FakeRuleSkill()
     r = SkillRegistry()
-    r.register(_FakeIPSkill)
-    r.register(_FakeUserSkill)
-    r.register(_FakeRuleSkill)
+    r.register(ip)
+    r.register(user)
+    r.register(rule)
 
     ip_skills = r.get_by_input_type(InputType.IP_ADDRESS)
-    assert _FakeIPSkill in ip_skills
-    assert _FakeUserSkill not in ip_skills
-    assert _FakeRuleSkill not in ip_skills
+    assert ip in ip_skills
+    assert user not in ip_skills
+    assert rule not in ip_skills
 
 
 def test_get_by_input_type_empty_when_none_registered():
@@ -158,14 +167,16 @@ def test_get_by_input_type_multiple_matches():
         def _run(self, value: str, context: dict) -> SkillResult:
             return SkillResult(data={}, summary="stub", success=True)
 
+    ip1 = _FakeIPSkill()
+    ip2 = _AnotherIPSkill()
     r = SkillRegistry()
-    r.register(_FakeIPSkill)
-    r.register(_AnotherIPSkill)
+    r.register(ip1)
+    r.register(ip2)
 
     ip_skills = r.get_by_input_type(InputType.IP_ADDRESS)
     assert len(ip_skills) == 2
-    assert _FakeIPSkill in ip_skills
-    assert _AnotherIPSkill in ip_skills
+    assert ip1 in ip_skills
+    assert ip2 in ip_skills
 
 
 # ---------------------------------------------------------------------------
@@ -174,10 +185,12 @@ def test_get_by_input_type_multiple_matches():
 
 
 def test_all_returns_all_registered_skills():
+    ip = _FakeIPSkill()
+    user = _FakeUserSkill()
     r = SkillRegistry()
-    r.register(_FakeIPSkill)
-    r.register(_FakeUserSkill)
-    assert set(r.all()) == {_FakeIPSkill, _FakeUserSkill}
+    r.register(ip)
+    r.register(user)
+    assert set(r.all()) == {ip, user}
 
 
 def test_all_empty_when_nothing_registered():
@@ -192,5 +205,5 @@ def test_all_empty_when_nothing_registered():
 
 def test_repr_contains_skill_names():
     r = SkillRegistry()
-    r.register(_FakeIPSkill)
+    r.register(_FakeIPSkill())
     assert "fake_ip" in repr(r)

@@ -1,65 +1,71 @@
-"""SkillRegistry — singleton that maps skill names to Skill classes.
+"""SkillRegistry — singleton that maps skill names to Skill instances.
+
+Skills are registered as pre-built instances (not classes) so that
+constructor-injected dependencies are wired up once at startup and reused
+for every invocation.
 
 Usage::
 
     from skills.registry import registry
-    from skills.analysis.ip_lookup import IPLookupSkill
+    from skills.analysis.windows_ip_lookup import WindowsIPLookupSkill
 
-    registry.register(IPLookupSkill)
+    skill = WindowsIPLookupSkill(builder=builder, executor=executor)
+    registry.register(skill)
 
-    skill_cls = registry.get("ip_lookup")
-    result = skill_cls().execute("192.168.1.1")
+    result = registry.get("windows_ip_lookup").execute("10.0.0.1")
 """
 
 from skills.base import InputType, Skill
 
 
 class SkillRegistry:
-    """Singleton registry that tracks all available Skill classes.
+    """Singleton registry that stores ready-to-use Skill instances.
 
     Skills are registered explicitly via ``register()``.  The singleton
     instance is exposed at module level as ``registry`` for convenience.
     """
 
     _instance: "SkillRegistry | None" = None
+    _skills: dict[str, Skill]  # typed at class level; initialised in __new__
 
     def __new__(cls) -> "SkillRegistry":
         if cls._instance is None:
             instance = super().__new__(cls)
-            instance._skills: dict[str, type[Skill]] = {}
+            instance._skills = {}
             cls._instance = instance
         return cls._instance
 
-    def register(self, skill_class: type[Skill]) -> None:
-        """Register a Skill class under its declared ``name``.
+    def register(self, skill: Skill) -> None:
+        """Register a Skill instance under its declared ``name``.
+
+        Re-registering under the same name replaces the previous entry.
 
         Args:
-            skill_class: A concrete subclass of ``Skill`` with a ``name``
-                         class attribute set.
+            skill: A concrete ``Skill`` instance with a ``name`` attribute.
 
         Raises:
-            ValueError: If ``skill_class`` has no ``name`` attribute.
+            ValueError: If ``skill`` has no ``name`` attribute.
         """
-        if not hasattr(skill_class, "name"):
+        if not hasattr(skill, "name"):
             raise ValueError(
-                f"{skill_class.__name__} must declare a `name` class attribute "
-                "before being registered."
+                f"{skill.__class__.__name__} must declare a `name` class "
+                "attribute before being registered."
             )
-        self._skills[skill_class.name] = skill_class
+        self._skills[skill.name] = skill
 
-    def get(self, name: str) -> type[Skill] | None:
-        """Return the Skill class registered under ``name``, or None."""
+    def get(self, name: str) -> Skill | None:
+        """Return the Skill instance registered under ``name``, or None."""
         return self._skills.get(name)
 
-    def get_by_input_type(self, input_type: InputType) -> list[type[Skill]]:
-        """Return all registered Skill classes that handle ``input_type``."""
+    def get_by_input_type(self, input_type: InputType) -> list[Skill]:
+        """Return all registered Skill instances that handle ``input_type``."""
         return [
-            cls for cls in self._skills.values()
-            if getattr(cls, "input_type", None) == input_type
+            skill for skill in self._skills.values()
+            if getattr(skill, "input_type", None) == input_type
         ]
 
-    def all(self) -> list[type[Skill]]:
-        """Return all registered Skill classes."""
+    def all(self) -> list[Skill]:
+        """Return all registered Skill instances."""
         return list(self._skills.values())
 
     def __repr__(self) -> str:

@@ -79,6 +79,11 @@ class QueryBuilderSkill(Skill):
         """
         self._store = store
 
+    @property
+    def store(self) -> InMemoryTemplateStore:
+        """Expose the template store so analysis skills can register templates."""
+        return self._store
+
     def _run(self, value: str, context: dict[str, Any]) -> SkillResult:
         """Build a DSL JSON string for template ``value``.
 
