@@ -1,0 +1,11 @@
+# Dependencies are added here as each step is implemented.
+# Step 5  — langgraph
+# Step 6  — chromadb
+# Tests   — pytest
+
+# Step 2 — Wazuh Indexer client (OpenSearch SDK)
+opensearch-py>=2.7.0
+python-dotenv>=1.0.0
+
+# Tests
+pytest>=8.0.0

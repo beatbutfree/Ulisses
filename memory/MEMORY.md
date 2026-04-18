@@ -1,0 +1,3 @@
+- [Project venv (uv)](project_venv.md) — venv at .venv/, managed with uv; use `.venv/bin/python -m pytest tests/ -v`
+- [Wazuh Indexer client architecture](project_wazuh_indexer.md) — query via OpenSearch SDK port 9200, not Wazuh REST port 55000; default index wazuh-archives-*
+- [Foundational skills architecture](project_foundational_skills.md) — QueryBuilderSkill + QueryExecutorSkill; not in SkillRegistry; InMemoryTemplateStore swapped for ChromaDB in Step 6
