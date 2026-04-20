@@ -3,3 +3,4 @@
 - [Foundational skills architecture](project_foundational_skills.md) — QueryBuilderSkill + QueryExecutorSkill; not in SkillRegistry; InMemoryTemplateStore swapped for ChromaDB in Step 6
 - [Analysis skills design decisions](project_analysis_skills_design.md) — one skill per decoder.name; explicit _note for absent fields; aggregated output; DI via constructor
 - [Step 4 implementation](project_step4_analysis_skills.md) — 3 Windows skills built; registry→instance-based; executor now exposes aggregations; wiring instructions for Step 5
+- [Step 5 — three-agent pipeline](project_step5_agent_loop.md) — Analyst/Evaluator/Formatter in agent/; schema.py is fixed contract; run_pipeline() entry point; 206 tests passing

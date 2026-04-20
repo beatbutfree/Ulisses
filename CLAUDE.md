@@ -39,9 +39,8 @@ After every step completes with all tests passing, update this file (mark the st
 | 2 | ✅ done | Wazuh Indexer client: OpenSearch SDK wrapper (port 9200) — `execute_query` + `parse_hits` |
 | 3 | ✅ done | Foundational skills: `QueryTemplate`, `InMemoryTemplateStore`, `QueryBuilderSkill`, `QueryExecutorSkill` |
 | 4 | ✅ done | Analysis skills: one skill per `decoder.name` — `windows_eventchannel` + `wazuh` internal; IP/user/rule lookup per source |
-| **5** | **▶ next** | **Agent loop using LangGraph** |
-| 5 | pending | Agent loop using LangGraph |
-| 6 | pending | ChromaDB knowledge store + reflection / self-improvement step |
+| 5 | ✅ done | Three-agent pipeline: Analyst → Evaluator → Formatter |
+| **6** | **▶ next** | **ChromaDB knowledge store + reflection / self-improvement step** |
 | 7 | pending | End-to-end test with a live Wazuh alert |
 
 ---
@@ -83,19 +82,13 @@ is a deliberate thesis decision (observability + academic explainability).
 
 ## Infrastructure (already deployed)
 
-- **Wazuh manager**: running on port 55000 (management only — not queried by the agent)
+- **Wazuh manager**: running on port 55000 (management only — not queried or usefull to the agent)
 - **Wazuh Indexer**: OpenSearch on port 9200 — this is what the agent queries for alerts/events
 - **Windows Domain Controller**: generating AD events
 - **Windows client**: generating endpoint events (logon, process, network)
 - Wazuh agents installed on both DC and client
 
-`.env` variables needed (never commit this file):
-```
-WAZUH_INDEXER_URL=https://<host>:9200
-WAZUH_API_USER=wazuh
-WAZUH_API_PASSWORD=<password>
-ANTHROPIC_API_KEY=<key>
-```
+`.env` variables needed (never commit this file)
 
 Default query index: `wazuh-archives-*` (all events). Use `wazuh-alerts-*` only when
 explicitly querying fired-alert documents.
@@ -161,6 +154,28 @@ Currently implemented log sources (expand as the lab grows):
 ### Dependency injection
 Both analysis and foundational skills receive dependencies via `__init__` and
 are registered as **instances** (not classes) in `SkillRegistry`.
+
+### Agent loop — three-agent pipeline (Step 5)
+
+```
+Alert + SOAR prompt → Analyst → Evaluator → Formatter → Final report
+```
+
+**Analyst** — reads skill registry descriptions from the system prompt to decide which skills to invoke (no ChromaDB for skill selection). Exercises investigative judgement: what looks suspicious, whether to dig deeper, when to stop. Does NOT make the TP/FP call. Output: `<finding>` and `<open_question>` XML blocks (free prose inside, no formatting pressure).
+
+**Evaluator** — reads analyst doc only; no skill access. Makes the TP/FP call with a confidence score; explains both malicious and benign interpretations before committing. Output: `<assessment>` XML block.
+
+**Formatter** — receives both docs; calls a single `produce_report` tool to emit the final report. Schema is enforced by the tool definition, not by prompting — this is the only reliable way to guarantee identical structure across runs.
+
+`produce_report` fixed schema (never change field names):
+```
+report_id, generated_at, verdict, confidence, severity, title,
+executive_summary, technical_breakdown, observables, findings,
+recommended_actions, open_questions,
+raw_analyst_doc, raw_evaluator_doc   ← full audit trail, preserved verbatim
+```
+
+**Implementation order**: Formatter first (fewest dependencies, forces the schema to be concrete) → Evaluator → Analyst (most complex, depends on full skill registry).
 
 ---
 
