@@ -1,6 +1,4 @@
 .env*
-CLAUDE*
-.claude*
 *.log
 *.tmp
 *.bak
