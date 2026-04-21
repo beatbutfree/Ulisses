@@ -75,7 +75,9 @@ def test_graph_calls_agents_in_order():
     }
     pipeline.invoke(initial)
 
-    analyst.run.assert_called_once_with(_ALERT, "ticket INC-1")
+    analyst.run.assert_called_once_with(
+        alert=_ALERT, soar_prompt="ticket INC-1", skill_log=[]
+    )
     evaluator.run.assert_called_once_with(_ANALYST_DOC)
     formatter.run.assert_called_once_with(_ANALYST_DOC, _EVALUATOR_DOC)
 

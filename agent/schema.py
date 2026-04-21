@@ -14,6 +14,40 @@ from typing import Any, TypedDict
 # ---------------------------------------------------------------------------
 
 
+class SkillExecutionRecord(TypedDict, total=False):
+    """One row in the per-run skill execution log read by the reflector.
+
+    ``kind`` distinguishes the two mutating skills:
+
+    - ``"chroma_retrieved"`` — ``ChromaQuerySkill`` pulled a stored template.
+      Populates ``query_id`` and ``was_modified``.
+    - ``"query_crafted"``    — ``QueryCrafterSkill`` generated a novel DSL.
+      Populates ``crafted_dsl``, ``parameters``.
+
+    Other skills MAY append records (``kind="skill_called"``) for telemetry,
+    but the reflector only acts on the two kinds above.
+    """
+
+    kind: str                # chroma_retrieved | query_crafted | skill_called
+    skill_name: str
+    goal: str
+    input_type: str
+    security_component: str
+    sec_comp_extra: str
+    value: str
+    result_count: int
+    success: bool
+    # chroma_retrieved only
+    query_id: str
+    was_modified: bool
+    # query_crafted only
+    crafted_dsl: str
+    parameters: list[str]
+    extra_context: str
+    # free-form
+    error: str
+
+
 class ObservableRecord(TypedDict):
     """An observable extracted from the alert and its disposition."""
 

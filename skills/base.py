@@ -23,6 +23,8 @@ class InputType(str, Enum):
     USERNAME = "username"
     RULE_ID = "rule_id"
     EVENT_ID = "event_id"
+    # Generic skills choose their input type at call-time via tool parameters.
+    META = "meta"
     # Foundational skill types
     TEMPLATE_NAME = "template_name"
     QUERY_DSL = "query_dsl"
@@ -117,6 +119,12 @@ class Skill(ABC):
     name: str
     description: str
     input_type: InputType
+    # Generic skills bypass the analyst's decoder-prefix tool filter and are
+    # exposed for every alert. They declare their full tool-input schema via
+    # ``tool_input_schema`` (overridden by subclass) and read parameters from
+    # ``context["tool_input"]`` inside ``_run``.
+    is_generic: bool = False
+    tool_input_schema: dict[str, Any] | None = None
 
     @abstractmethod
     def _run(self, value: str, context: dict[str, Any]) -> SkillResult:

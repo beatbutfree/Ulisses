@@ -40,8 +40,8 @@ After every step completes with all tests passing, update this file (mark the st
 | 3 | ✅ done | Foundational skills: `QueryTemplate`, `InMemoryTemplateStore`, `QueryBuilderSkill`, `QueryExecutorSkill` |
 | 4 | ✅ done | Analysis skills: one skill per `decoder.name` — `windows_eventchannel` + `wazuh` internal; IP/user/rule lookup per source |
 | 5 | ✅ done | Three-agent pipeline: Analyst → Evaluator → Formatter |
-| **6** | **▶ next** | **ChromaDB knowledge store + reflection / self-improvement step** |
-| 7 | pending | End-to-end test with a live Wazuh alert |
+| 6 | ✅ done | ChromaDB knowledge store + `ChromaQuerySkill` + `QueryCrafterSkill` + `ReflectorAgent` + structured JSON logging |
+| **7** | **▶ next** | **End-to-end test with a live Wazuh alert** |
 
 ---
 
@@ -105,12 +105,75 @@ explicitly querying fired-alert documents.
 - `summary` is a 1–3 sentence natural language brief written for a human analyst
 
 ### Self-improvement (Step 6)
-After each analysis cycle the agent runs a reflection step:
-1. Was the query useful? (did it return relevant, non-empty results?)
-2. If yes → store `{description, query, input_type, source, confidence_score}` in ChromaDB
-3. On future analyses → retrieve top-K semantically similar past queries before building new ones
 
-The thesis claim: this creates compounding analytical memory without retraining the model.
+Two generic foundational skills extend the analyst's toolbox, and a fourth
+pipeline agent closes the loop:
+
+- **`ChromaQuerySkill`** — retrieves semantically similar past queries from
+  ChromaDB. Filters by `security_component` + `input_type` (two-filter `$and`
+  metadata query) before semantic search on `goal`. An internal LLM decides:
+  `use_as_is` | `modify` | `no_match`. Executes the chosen DSL through
+  `QueryExecutorSkill` and returns hits.
+- **`QueryCrafterSkill`** — on-demand novel query creation when no template or
+  stored query fits. LLM emits DSL via a forced `emit_query` tool; skill
+  validates by executing (HTTP error = invalid → retry once with feedback;
+  zero results = valid information).
+- **`ReflectorAgent`** — runs after the formatter. Reads `skill_log` (mutable
+  list threaded through the pipeline) and the evaluator's verdict, then:
+  1. For every `chroma_retrieved` record → `increment_counters` (`times_used`
+     always; `times_successful` only on TP with non-zero results).
+  2. For every `query_crafted` record → promote to ChromaDB iff verdict is
+     `true_positive` with results, or `inconclusive` with confidence ≥ 0.6.
+     Skip on `false_positive`, zero results, or low-confidence inconclusive.
+
+Both generic skills are marked `is_generic=True` + `input_type=InputType.META`
+so they bypass the decoder-prefix filter and appear as analyst tools for any
+alert. They are wired manually in `runner.py` (not auto-discovered) and live
+in `skills/foundational/`.
+
+The `InMemoryTemplateStore` remains — ChromaDB is additive, not a replacement.
+Templates are hand-authored primitives; ChromaDB holds queries earned at
+runtime.
+
+**Stored schema** (ChromaDB metadata + document):
+```
+id, description, query (DSL), parameters, security_component, sec_comp_extra,
+input_type, goal, times_used, times_successful, created_at, last_used_at
+```
+The embedded document is `description + "\n" + goal` (semantic search target).
+`parameters` is stored as a comma-joined string (ChromaDB rejects list values).
+
+The thesis claim: this creates compounding analytical memory without retraining
+the model.
+
+### Four-agent pipeline (Step 6 addition)
+
+```
+Alert + SOAR prompt → Analyst → Evaluator → Formatter → Reflector → Final report
+```
+
+The reflector node is optional at `build_graph()` time (pass `reflector=None`
+to omit). When present, it runs *after* the formatter so it sees the final
+verdict before deciding promotions. The analyst threads a shared mutable
+`skill_log: list[SkillExecutionRecord]` through the `context` dict so the
+retrieval/crafter skills can record what happened for the reflector to
+interpret.
+
+### Logging (Step 6 addition)
+
+`agent/logging_config.py` configures a structured JSON logger
+(`python-json-logger`) with a `RotatingFileHandler` at `logs/soc_agent.jsonl`.
+Every pipeline run gets a `run_id` (UUID v4, stamped on every log record via a
+`LoggerAdapter`). Events emitted: `pipeline_start`, `skill_called`,
+`chroma_retrieved`, `query_crafted`, `pipeline_done`. The run-id stamping is
+idempotent (`_configured` flag) so repeated `get_logger()` calls don't
+duplicate handlers.
+
+### Evaluation methodology — deferred
+
+Formal metrics (detection rate, FPR, query reuse rate, latency) will be
+designed once logged run data exists. The logging schema above is intended to
+make later evaluation a log-analysis exercise rather than a code change.
 
 ### Severity alignment
 Map Wazuh rule levels to the internal `Severity` enum:

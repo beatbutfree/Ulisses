@@ -169,7 +169,14 @@ def test_analyst_tool_use_loop():
 
     assert "<finding>" in result
     assert client.messages.create.call_count == 2
-    ip_skill.execute.assert_called_once_with(value="10.0.0.5", context={"alert": _ALERT})
+    ip_skill.execute.assert_called_once_with(
+        value="10.0.0.5",
+        context={
+            "alert": _ALERT,
+            "skill_log": [],
+            "tool_input": {"value": "10.0.0.5"},
+        },
+    )
 
 
 def test_analyst_unknown_skill_returns_error_to_model():

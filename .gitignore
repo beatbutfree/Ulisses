@@ -9,3 +9,7 @@
 *.pyc
 *.pyo
 *.pyd
+
+# Step 6 — runtime state
+chroma_db/
+logs/
