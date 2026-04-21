@@ -1,6 +1,7 @@
 - [Project venv (uv)](project_venv.md) — venv at .venv/, managed with uv; use `.venv/bin/python -m pytest tests/ -v`
 - [Wazuh Indexer client architecture](project_wazuh_indexer.md) — query via OpenSearch SDK port 9200, not Wazuh REST port 55000; default index wazuh-archives-*
-- [Foundational skills architecture](project_foundational_skills.md) — QueryBuilderSkill + QueryExecutorSkill; not in SkillRegistry; InMemoryTemplateStore swapped for ChromaDB in Step 6
+- [Foundational skills architecture](project_foundational_skills.md) — QueryBuilderSkill + QueryExecutorSkill + generic ChromaQuery/QueryCrafter; InMemoryTemplateStore remains alongside ChromaDB
 - [Analysis skills design decisions](project_analysis_skills_design.md) — one skill per decoder.name; explicit _note for absent fields; aggregated output; DI via constructor
 - [Step 4 implementation](project_step4_analysis_skills.md) — 3 Windows skills built; registry→instance-based; executor now exposes aggregations; wiring instructions for Step 5
 - [Step 5 — three-agent pipeline](project_step5_agent_loop.md) — Analyst/Evaluator/Formatter in agent/; schema.py is fixed contract; run_pipeline() entry point; 206 tests passing
+- [Step 6 — ChromaDB + reflector](project_step6_reflection.md) — two generic foundational skills + ReflectorAgent; $and 2-filter retrieval; verdict-weighted promotion; JSON run-id logging; 253 tests passing

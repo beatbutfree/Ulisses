@@ -8,7 +8,9 @@ type: project
 
 **Flow**: `QueryBuilderSkill.execute(template_name, context={"params": {...}})` → `SkillResult.data["query"]` (DSL JSON string) → passed as `value` to `QueryExecutorSkill.execute(dsl_str)` → `SkillResult.data["hits"]`.
 
-**Template store**: `InMemoryTemplateStore` for Steps 3–5. Step 6 swaps it for a ChromaDB-backed store — same `get/add/list_all` protocol, no changes to the builder.
+**Template store**: `InMemoryTemplateStore` holds hand-authored primitives and remains active in Step 6 alongside ChromaDB. ChromaDB is additive — it stores queries earned at runtime via the reflector, while templates stay hand-authored. The two stores coexist and serve different purposes.
+
+**Step 6 additions**: two generic foundational skills (`ChromaQuerySkill`, `QueryCrafterSkill`) both with `is_generic=True` + `input_type=InputType.META`. Manually wired in `runner.py` (not auto-discovered). They bypass the analyst's decoder-prefix filter and appear as tools for any alert.
 
 **Substitution**: `_substitute()` uses `json.dumps(value, separators=(',',':'))` per placeholder, so strings get quoted, numbers stay bare, lists/dicts become compact JSON. Template author never wraps placeholders in quotes.
 
