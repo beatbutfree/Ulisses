@@ -73,11 +73,11 @@ At agent interface level, each skill must comply with a stable contract: typed i
 
 At reporting level, the final incident report must satisfy a fixed schema contract. This is necessary to make outputs auditable and comparable across runs.
 
-At memory interface level, the vector store accepts query records with constrained metadata representation, including conversion choices required by backend limitations (for example parameter list normalization). This constraint is operationally relevant because retrieval quality depends on metadata consistency.
+At memory interface level, the vector store accepts queries coupled with metadata, including conversion choices required by backend limitations (for example parameter list normalization). This constraint is operationally relevant because retrieval quality depends on metadata consistency.
 
 ### 3.5 Evaluation Design Principles
 
-The evaluation methodology in this thesis is designed as a staged, metrics-oriented process, with formal measurement expanding as logged run data accumulates.
+The evaluation methodology in this thesis is designed as a metrics-oriented process with formal measurement expanding as logged run data accumulates.
 
 1. Separation of implementation validation and analytical effectiveness
 Component-level correctness is verified first through unit and integration tests; operational effectiveness is then evaluated through end-to-end alert investigations.
@@ -91,10 +91,6 @@ Evaluations should privilege trace-backed interpretation over subjective quality
 4. Repeatability over anecdotal success
 The objective is not a single impressive run but consistent behavior across scenarios. Repetition and variance observation are therefore mandatory.
 
-5. Explicit threats-to-validity handling
-Conclusions must account for dataset scope, environment bias, scenario coverage limits, and potential prompt/model variability.
-
-The logging strategy already implemented (run identifiers plus structured event taxonomy) is intended to make this evaluation process cumulative: new experiments enrich the same analytical base without requiring redesign of instrumentation.
 
 ### 3.6 Chapter Summary
 
