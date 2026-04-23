@@ -21,7 +21,7 @@
 - Data/interface constraints and schema consistency
 - Evaluation design principles
 
-## Chapter 4. System Design and Architecture (6-7 pages)
+## Chapter 4. System Design and Architecture (8-9 pages)
 - End-to-end architecture overview
 - Skill contract and execution lifecycle
 - Decoder-specific analysis-skill strategy
@@ -30,7 +30,7 @@
 - Knowledge memory and reflection policy
 - Structured logging and severity normalization
 
-## Chapter 5. Implementation and Validation (6-7 pages)
+## Chapter 5. Implementation and Validation (5-6 pages)
 - Incremental implementation strategy
 - Core component realization
 - Enrichment workflow from alert to report
