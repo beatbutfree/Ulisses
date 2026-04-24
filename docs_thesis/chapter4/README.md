@@ -2,30 +2,14 @@
 
 ### 4.1 Architecture Overview
 
-This chapter presents the concrete architecture of the SOC L1 agent as implemented in code. The design objective is not  to automate alert handling, but to produce an investigation pipeline. For this reason, the system is decomposed into layers and role-specific agents, each with a specific responsibility.
+This chapter presents the architecture of the SOC L1 agent as implemented in code. The design objective is not  to automate alert handling, but to produce an investigation pipeline. For this reason, the system is decomposed into layers and role-specific agents, each with a specific responsibility.
 
 At runtime, the pipeline starts from a raw Wazuh alert plus optional SOAR context and terminates in a fixed-schema incident report. The main execution path is modeled as a LangGraph state machine, while all data enrichment is delegated to skill modules that rely on foundational query services.
 
-```mermaid
-flowchart LR
-    A[Wazuh Alert + SOAR Context] --> B[Analyst Agent]
-    B --> C[Evaluator Agent]
-    C --> D[Formatter Agent]
-    D --> E[Reflector Agent]
-    E --> F[Final Incident Report]
+Here's a minimal representation of the pipeline:
 
-    B --> G[Skill Registry]
-    G --> H[Analysis Skills]
-    G --> I[Generic Skills]
+![alt text](Pipeline.drawio.png)
 
-    H --> J[QueryBuilderSkill]
-    I --> J
-    J --> K[QueryExecutorSkill]
-    K --> L[Wazuh Indexer OpenSearch]
-
-    I --> M[ChromaQueryStore]
-    E --> M
-```
 
 The four core design goals are:
 1. Deterministic orchestration with explicit state transitions.
@@ -65,29 +49,12 @@ This explicit graph provides two benefits crucial for a thesis artifact:
 
 A concise sequence view of one run is shown below.
 
-```mermaid
-sequenceDiagram
-    participant R as Runner
-    participant A as Analyst
-    participant E as Evaluator
-    participant F as Formatter
-    participant Ref as Reflector
-    participant S as Chroma Store
+![alt text](Architettura.drawio.png)
 
-    R->>A: run(alert, soar_prompt, skill_log)
-    A-->>R: analyst_doc + updated skill_log
-    R->>E: run(analyst_doc)
-    E-->>R: evaluator_doc
-    R->>F: run(analyst_doc, evaluator_doc)
-    F-->>R: report
-    R->>Ref: run(skill_log, evaluator_doc)
-    Ref->>S: increment counters / promote crafted queries
-    Ref-->>R: reflection summary
-```
 
 ### 4.3 Skill Contract and Execution Lifecycle
 
-All skills inherit from the same abstract base in `skills/base.py`. The contract separates private analytical logic (`_run`) from public runtime concerns (`execute`). This prevents duplicated timing/error code and ensures uniform result envelopes.
+All skills inherit from the same abstract base in `skills/base.py`. The contract separates private analytical logic (`_run`) from public runtime concerns (`execute`). This abstract all the internal logic away from the agent, only exposing the necessary interfaces preserving the context.
 
 ```python
 class Skill(ABC):
@@ -124,11 +91,11 @@ Execution lifecycle of one skill call:
 4. `execute` stamps source and duration, catches unhandled exceptions.
 5. Result is serialized back to the agent loop as tool output.
 
-This lifecycle creates uniform telemetry and simplifies regression testing across heterogeneous skills.
+This lifecycle creates uniform execution flow and simplifies regression testing across heterogeneous skills.
 
 ### 4.4 Skill Registry and Discovery Architecture
 
-The registry in `skills/registry.py` stores ready-to-run skill instances, not classes. This is a deliberate dependency-injection choice: each skill can receive pre-wired collaborators (builder, executor, store, LLM client) during startup, then be reused at runtime without reconstruction.
+The registry in `skills/registry.py` stores ready-to-run skill instances, not classes. The choice of  dependency-injection here is deliberate since each skill can receive pre-wired collaborators (builder, executor, store, LLM client) during startup, then be reused at runtime without reconstruction.
 
 ```python
 class SkillRegistry:
@@ -151,16 +118,32 @@ def discover_skill_classes() -> list[type[Skill]]:
 
 Foundational generic skills (`chroma_query`, `query_crafter`) are wired manually in `agent/runner.py` because they require explicit dependencies that auto-discovery cannot infer safely.
 
+```python
+registry.register(
+    ChromaQuerySkill(
+        client=anthropic_client,
+        store=chroma_store,
+        executor=executor,
+    )
+)
+registry.register(
+    QueryCrafterSkill(
+        client=anthropic_client,
+        executor=executor,
+    )
+)
+```
+
 ### 4.5 Decoder-Specific Analysis-Skill Strategy
 
-A central design decision is one skill family per decoder/log-source semantics. The problem addressed is subtle but critical: a syntactically valid query can still be semantically wrong if field paths do not match the source decoder. In SOC practice, this leads to silent false negatives.
+A central design decision is to use one skill family per decoder/log-source semantic. This inevitably leads to more human work to prepare a sufficient number of skill instances. The main reason for this choice is that different decoders map the same logical fields to different variables. For example, an IP address is `data.win.eventdata.ipAddress` in Windows logs, but it could be `data.srcIp` in a firewall log. A generic skill would have to guess which field to query, and if it guessed wrong it would return zero results without any explicit error. Another option would be to rewrite built-in and custom decoders to map the same logical field to common variables, but this would require substantial maintenance, would be error-prone, and could be impossible when source logs contain highly specific fields.
 
 The current implementation provides a Windows decoder set:
 1. `windows_ip_lookup`
 2. `windows_username_lookup`
 3. `windows_rule_lookup`
 
-Each skill defines a source-specific OpenSearch template and aggregates only relevant fields. For example, `windows_ip_lookup` targets `data.win.eventdata.ipAddress` with an explicit decoder filter.
+Each skill defines a source-specific OpenSearch template and aggregates only relevant fields. For example, `windows_ip_lookup` targets `data.win.eventdata.ipAddress` with an explicit decoder filter:
 
 ```json
 {
@@ -175,21 +158,55 @@ Each skill defines a source-specific OpenSearch template and aggregates only rel
 }
 ```
 
+It also aggregates only the fields relevant for IP analysis, avoiding unnecessary token consumption:
+
+```json
+{
+  "aggs": {
+    "activity_over_time": {
+      "date_histogram": {
+        "field": "@timestamp",
+        "fixed_interval": "5m",
+        "min_doc_count": 1
+      }
+    },
+    "top_rules": {
+      "terms": {"field": "rule.id", "size": 5},
+      "aggs": {
+        "rule_meta": {
+          "top_hits": {"size": 1, "_source": ["rule.level", "rule.description"]}
+        }
+      }
+    },
+    "top_users": {
+      "terms": {"field": "data.win.eventdata.targetUserName", "size": 5}
+    },
+    "top_dst_ips": {
+      "terms": {"field": "data.win.eventdata.destinationAddress", "size": 5}
+    },
+    "top_dst_ports": {
+      "terms": {"field": "data.win.eventdata.destinationPort", "size": 5}
+    }
+  }
+}
+```
+
 This strategy improves correctness and interpretability:
 1. Query intent is explicit per source.
 2. Empty results are less likely to come from schema mismatch.
 3. Skill descriptions remain operationally meaningful for the analyst LLM.
+4. It's easier for the Analyst to identify which skill to use for each source, improving tool-use precision.
 
 ### 4.6 Layered Query Pipeline and Dependency Boundaries
 
 Data access follows a strict three-layer path:
 
 ```mermaid
-flowchart LR
-    A[Analysis / Generic Skill] --> B[QueryBuilderSkill]
-    B --> C[QueryExecutorSkill]
-    C --> D[WazuhIndexerClient]
-    D --> E[OpenSearch Indexes]
+flowchart TD
+    analysis["Analysis Skill or Generic Skill"] --> builder["QueryBuilderSkill"]
+    builder --> executor["QueryExecutorSkill"]
+    executor --> client["WazuhIndexerClient"]
+    client --> indexes["OpenSearch Indexes"]
 ```
 
 This separation is enforced in code:
@@ -375,7 +392,6 @@ This normalization decouples downstream report logic from platform-specific seve
 
 For deployment context, the infrastructure used by this architecture is shown below.
 
-![alt text](Architettura.drawio.png)
 
 The key boundary to remember is that analytical query traffic goes to Wazuh Indexer/OpenSearch (port 9200), while manager API endpoints are not part of the investigative data path.
 
