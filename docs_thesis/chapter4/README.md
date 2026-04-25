@@ -8,7 +8,7 @@ At runtime, the pipeline starts from a raw Wazuh alert plus optional SOAR contex
 
 Here's a minimal representation of the pipeline:
 
-![alt text](Pipeline.drawio.png)
+![Agent Pipeline](Pipeline.drawio.png)
 
 
 The four core design goals are:
@@ -49,7 +49,7 @@ This explicit graph provides two benefits crucial for a thesis artifact:
 
 A concise sequence view of one run is shown below.
 
-![alt text](Architettura.drawio.png)
+![Logic Flowchart of an Analysis](Architettura.drawio.png)
 
 
 ### 4.3 Skill Contract and Execution Lifecycle
@@ -201,13 +201,7 @@ This strategy improves correctness and interpretability:
 
 Data access follows a strict three-layer path:
 
-```mermaid
-flowchart TD
-    analysis["Analysis Skill or Generic Skill"] --> builder["QueryBuilderSkill"]
-    builder --> executor["QueryExecutorSkill"]
-    executor --> client["WazuhIndexerClient"]
-    client --> indexes["OpenSearch Indexes"]
-```
+![Data Access Pipeline](image.png)
 
 This separation is enforced in code:
 1. `QueryBuilderSkill` performs deterministic template substitution.
@@ -241,11 +235,30 @@ def execute_query(self, query: dict[str, Any], index: str = DEFAULT_INDEX, size:
 
 A parser layer then strips sparse data and optionally removes `full_log` to reduce token overhead passed to LLM components.
 
+```python
+def parse_hits(
+    response: dict[str, Any],
+    keep_full_log: bool = False,
+) -> ParsedResponse:
+    raw_hits: list[dict[str, Any]] = response.get("hits", {}).get("hits", [])
+    total: int = response.get("hits", {}).get("total", {}).get("value", 0)
+    took_ms: int = response.get("took", 0)
+
+    hits: list[dict[str, Any]] = []
+    for hit in raw_hits:
+        source: dict[str, Any] = dict(hit.get("_source", {}))
+        if not keep_full_log:
+            source.pop("full_log", None)
+        hits.append(strip_empty(source))
+
+    return ParsedResponse(hits=hits, total=total, took_ms=took_ms)
+```            
+
 ### 4.7 Multi-Agent Pipeline: Analyst, Evaluator, Formatter, Reflector
 
 #### 4.7.1 Analyst Agent
 
-The Analyst is the only node with tool access. It performs iterative evidence gathering via Anthropic tool-use and stops when enough context is collected or a max-iteration guard is reached.
+The Analyst performs iterative evidence gathering via Anthropic tool-use and stops when enough context is collected or a max-iteration guard is reached.
 
 ```python
 for _ in range(_MAX_ITERATIONS):
@@ -262,13 +275,15 @@ if getattr(skill, "is_generic", False) is True:
 return skill.name.startswith(prefix)
 ```
 
+The possibility of multiple analyst agents was explored, but excluded for reducing complexity. Future work could explore more specialized analyst roles, but for this thesis the single Analyst agent is sufficient to test the core research questions about LLM-based investigation pipelines.
+
 #### 4.7.2 Evaluator Agent
 
-The Evaluator receives only the analyst document and performs verdict reasoning (`true_positive`, `false_positive`, `inconclusive`) with confidence. It has no tool access by design, reducing coupling between retrieval and adjudication.
+The Evaluator receives only the analyst document and performs verdict reasoning (`true_positive`, `false_positive`, `inconclusive`) with a confidence score. It has no tool access by design. This forces it to make a judgment based solely on the evidence collected by the Analyst, without any possibility of further information gathering. This design choice is intentional to create a clear separation between evidence collection and verdict reasoning, which simplifies both the architecture and the evaluation of the system's performance on these distinct tasks.
 
 #### 4.7.3 Formatter Agent
 
-The Formatter enforces schema consistency by forcing a single `produce_report` tool call. This avoids relying on fragile free-form generation for structured outputs.
+The Formatter enforces schema consistency by forcing a single `produce_report` tool call. This avoids relying on fragile free-form generation for structured outputs. Note that both the analyst and the evaluator are instructed to produce semi-structured text, but only the formatter is required to produce a fixed-schema report. This allows the analyst and evaluator to express their reasoning in a more natural way, while still ensuring that the final output is consistent and machine-readable.
 
 ```python
 response = self._client.messages.create(
@@ -280,7 +295,30 @@ response = self._client.messages.create(
 
 #### 4.7.4 Reflector Agent
 
-The Reflector is executed after formatting and uses `skill_log + evaluator_doc` to apply memory policy decisions. It does not modify the final report; it only performs persistence side effects.
+The Reflector is executed after formatting and uses `skill_log + evaluator_doc` to apply memory policy decisions. It does not modify the final report; it only performs persistence side effects and in case add the query to the knowledge store.
+
+```python
+def _promote(self, record: dict[str, Any]) -> str | None:
+    try:
+        description, goal = self._describe(record)
+    except Exception:
+        # Describe failure should not crash the pipeline — fall back to
+        # the analyst's original goal as both fields.
+        description = record.get("goal", "")
+        goal = record.get("goal", "")
+
+    stored = StoredQuery(
+        description=description,
+        query=record.get("crafted_dsl", ""),
+        parameters=list(record.get("parameters", [])),
+        security_component=record.get("security_component", ""),
+        sec_comp_extra=record.get("sec_comp_extra", ""),
+        input_type=record.get("input_type", ""),
+        goal=goal,
+    )
+    self._store.add(stored)
+    return stored.id
+```
 
 ### 4.8 Knowledge Memory and Reflection Policy
 
@@ -309,12 +347,30 @@ class StoredQuery:
 Retrieval uses strict metadata filtering before semantic similarity:
 
 ```python
-where = {
-    "$and": [
-        {"security_component": {"$eq": security_component}},
-        {"input_type": {"$eq": input_type}},
+def search(
+    self,
+    goal: str,
+    security_component: str,
+    input_type: str,
+    k: int = 3,
+) -> list[StoredQuery]:
+    where = {
+        "$and": [
+            {"security_component": {"$eq": security_component}},
+            {"input_type": {"$eq": input_type}},
+        ]
+    }
+    results = self._collection.query(
+        query_texts=[goal],
+        n_results=k,
+        where=where,
+    )
+    ids = results.get("ids", [[]])[0]
+    metadatas = results.get("metadatas", [[]])[0]
+    return [
+        StoredQuery.from_metadata(doc_id=ids[i], metadata=metadatas[i])
+        for i in range(len(ids))
     ]
-}
 ```
 
 This prevents cross-context retrieval errors and keeps semantic ranking inside a valid scope.
@@ -324,7 +380,22 @@ This prevents cross-context retrieval errors and keeps semantic ranking inside a
 When retrieval is insufficient, `QueryCrafterSkill` synthesizes a new DSL via forced tool output, then validates it by live execution. A syntax/runtime failure triggers one retry with error feedback.
 
 ```python
-_MAX_VALIDATION_ATTEMPTS = 2
+def _craft(self, user_message: str) -> tuple[str, list[str]]:
+    """Single LLM round-trip → ``(dsl_string, parameter_names)``."""
+    response = self._client.messages.create(
+        model=self._model,
+        max_tokens=2048,
+        system=_SYSTEM_PROMPT,
+        tools=[_EMIT_QUERY_TOOL],
+        tool_choice={"type": "tool", "name": "emit_query"},
+        messages=[{"role": "user", "content": user_message}],
+    )
+    for block in response.content:
+        if getattr(block, "type", None) == "tool_use" and block.name == "emit_query":
+            dsl = block.input.get("dsl", "")
+            params = block.input.get("parameters", [])
+            return dsl, list(params)
+    raise RuntimeError("Crafter model did not call emit_query.")
 ```
 
 A query returning zero documents is treated as valid information, not as generation failure.
@@ -386,18 +457,9 @@ if level <= 14:
 return cls.CRITICAL
 ```
 
-This normalization decouples downstream report logic from platform-specific severity numerics.
+### 4.10 Design Rationale and Tradeoffs
 
-### 4.10 Concrete Infrastructure Placement
-
-For deployment context, the infrastructure used by this architecture is shown below.
-
-
-The key boundary to remember is that analytical query traffic goes to Wazuh Indexer/OpenSearch (port 9200), while manager API endpoints are not part of the investigative data path.
-
-### 4.11 Design Rationale and Tradeoffs
-
-The architecture chooses explicitness over maximal abstraction. This yields strong traceability and testability, but also introduces more components and interfaces than a monolithic prompt chain. The tradeoff is intentional and aligned with thesis objectives.
+The architecture chooses explicitness over maximal abstraction. It produces strong traceability and testability, but also introduces more components and interfaces than a monolithic prompt chain. The tradeoff is intentional and aligned with thesis objectives.
 
 Main advantages:
 1. Clear separation of concerns and failure domains.
@@ -408,10 +470,10 @@ Main advantages:
 Main costs:
 1. Higher orchestration complexity.
 2. More dependency wiring during startup.
-3. Greater design discipline needed when extending skills and schemas.
+3. Greater human effort in expanding the skills.
 
-Given the thesis constraints (auditability, academic defensibility, operational realism), this tradeoff is acceptable and methodologically coherent.
+Given the thesis constraints of explicability and traceability, this tradeoff is acceptable. Future work could explore ways to reduce complexity, such as automating skill generation for new decoders.
 
-### 4.12 Chapter Summary
+### 4.11 Chapter Summary
 
 This chapter detailed the full architecture from state orchestration to skill contracts, layered data access, and memory reflection policy. The resulting system is not a generic "LLM wrapper," but a modular SOC investigation engine with explicit control flow, typed interfaces, and persistent analytical memory. These architectural properties provide the foundation for the implementation analysis in Chapter 5 and for the metrics-oriented evaluation in Chapter 6.

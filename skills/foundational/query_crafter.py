@@ -28,7 +28,7 @@ _SYSTEM_PROMPT = """\
 You are an OpenSearch DSL specialist.
 
 Given a natural-language goal, an observable type, a security component
-(e.g. "wazuh") and optional extra context, produce ONE OpenSearch DSL JSON
+(default: "wazuh") and optional extra context, produce ONE OpenSearch DSL JSON
 object that answers the goal.
 
 Hard rules:

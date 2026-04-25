@@ -21,7 +21,7 @@
 - Data/interface constraints and schema consistency
 - Evaluation design principles
 
-## Chapter 4. System Design and Architecture (8-9 pages)
+## Chapter 4. System Design and Architecture (9-10 pages)
 - End-to-end architecture overview
 - Skill contract and execution lifecycle
 - Decoder-specific analysis-skill strategy
