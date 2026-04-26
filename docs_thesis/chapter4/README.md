@@ -2,7 +2,7 @@
 
 ### 4.1 Architecture Overview
 
-This chapter presents the architecture of the SOC L1 agent as implemented in code. The design objective is not  to automate alert handling, but to produce an investigation pipeline. For this reason, the system is decomposed into layers and role-specific agents, each with a specific responsibility.
+This chapter presents the architecture of the SOC L1 agent as implemented in code. The design objective is not only to automate alert handling, but to produce a reproducible and inspectable investigation pipeline. For this reason, the system is decomposed into layers and role-specific agents, each with a specific responsibility.
 
 At runtime, the pipeline starts from a raw Wazuh alert plus optional SOAR context and terminates in a fixed-schema incident report. The main execution path is modeled as a LangGraph state machine, while all data enrichment is delegated to skill modules that rely on foundational query services.
 
@@ -54,7 +54,7 @@ A concise sequence view of one run is shown below.
 
 ### 4.3 Skill Contract and Execution Lifecycle
 
-All skills inherit from the same abstract base in `skills/base.py`. The contract separates private analytical logic (`_run`) from public runtime concerns (`execute`). This abstract all the internal logic away from the agent, only exposing the necessary interfaces preserving the context.
+All skills inherit from the same abstract base in `skills/base.py`. The contract separates private analytical logic (`_run`) from public runtime concerns (`execute`). This abstracts internal logic away from the agent and exposes only the interfaces needed for orchestration while preserving context.
 
 ```python
 class Skill(ABC):
@@ -95,7 +95,7 @@ This lifecycle creates uniform execution flow and simplifies regression testing 
 
 ### 4.4 Skill Registry and Discovery Architecture
 
-The registry in `skills/registry.py` stores ready-to-run skill instances, not classes. The choice of  dependency-injection here is deliberate since each skill can receive pre-wired collaborators (builder, executor, store, LLM client) during startup, then be reused at runtime without reconstruction.
+The registry in `skills/registry.py` stores ready-to-run skill instances, not classes. The dependency-injection choice here is deliberate: each skill can receive pre-wired collaborators (builder, executor, store, LLM client) during startup, then be reused at runtime without reconstruction.
 
 ```python
 class SkillRegistry:
@@ -195,7 +195,7 @@ This strategy improves correctness and interpretability:
 1. Query intent is explicit per source.
 2. Empty results are less likely to come from schema mismatch.
 3. Skill descriptions remain operationally meaningful for the analyst LLM.
-4. It's easier for the Analyst to identify which skill to use for each source, improving tool-use precision.
+4. It is easier for the Analyst to identify which skill to use for each source, improving tool-use precision.
 
 ### 4.6 Layered Query Pipeline and Dependency Boundaries
 
@@ -295,7 +295,7 @@ response = self._client.messages.create(
 
 #### 4.7.4 Reflector Agent
 
-The Reflector is executed after formatting and uses `skill_log + evaluator_doc` to apply memory policy decisions. It does not modify the final report; it only performs persistence side effects and in case add the query to the knowledge store.
+The Reflector is executed after formatting and uses `skill_log + evaluator_doc` to apply memory policy decisions. It does not modify the final report; it only performs persistence side effects and, when eligible, adds queries to the knowledge store.
 
 ```python
 def _promote(self, record: dict[str, Any]) -> str | None:
@@ -472,7 +472,7 @@ Main costs:
 2. More dependency wiring during startup.
 3. Greater human effort in expanding the skills.
 
-Given the thesis constraints of explicability and traceability, this tradeoff is acceptable. Future work could explore ways to reduce complexity, such as automating skill generation for new decoders.
+Given the thesis constraints of explainability and traceability, this tradeoff is acceptable. Future work could explore ways to reduce complexity, such as automating skill generation for new decoders.
 
 ### 4.11 Chapter Summary
 

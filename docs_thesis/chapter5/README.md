@@ -144,8 +144,9 @@ The memory layer introduced a practical data-model challenge: Chroma metadata fi
 
 This was solved by defining a normalized persistence schema and explicit serialization rules at the store boundary. Parameters were normalized into a stable string representation for metadata storage, while semantic text remained in document content. This separation preserved retrieval quality and prevented backend-format quirks from leaking into higher-level agent logic.
 
+
 ### 5.6 Chapter Summary
 
 This chapter described how the SOC L1 agent was implemented through an incremental, interface-first strategy designed to control complexity and preserve explainability. It detailed the realization of foundational query services, decoder-aware enrichment skills, staged agent orchestration, and policy-governed memory adaptation.
 
-It also documented the principal challenges that were successfully addressed, including schema mismatch risk, dependency wiring, structured output stability, safe query innovation, observability, loop saturation control, mutable state hygiene, and vector-store serialization constraints. The resulting implementation establishes a stable foundation for the evaluation chapter, where analytical effectiveness and operational tradeoffs can be measured systematically.
+It also documented the principal challenges that were successfully addressed, including schema mismatch risk, dependency wiring, structured output stability, safe query innovation, observability, loop saturation control and vector-store serialization constraints. The resulting implementation establishes a stable foundation for the evaluation chapter, where analytical effectiveness and operational tradeoffs can be measured systematically.

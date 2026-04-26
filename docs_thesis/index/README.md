@@ -50,6 +50,3 @@
 - Limitations
 - Future research directions
 
-## Back Matter (1-2 pages)
-- Bibliography
-- Appendices (prompts, policy details, supplementary tables)

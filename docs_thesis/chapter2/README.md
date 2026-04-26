@@ -4,7 +4,7 @@
 
 Modern SOC operations are shaped by three simultaneous pressures: volume, heterogeneity, and response-time constraints. Volume refers not only to the number of incoming alerts, but to the amount of contextual logs required to manage each alert. Heterogeneity refers to the coexistence of endpoint events, identity activity, network traces, and platform-specific log schemas, each with different structure. Response-time constraints are imposed by internal service-level objectives and by the practical expectation that suspicious activity must be investigated before lateral movement or persistence becomes harder to contain.
 
-Within this environment, the L1 analyst role is operationally critical and structurally overloaded. The analyst is expected to triage quickly, collect sufficient evidence, avoid premature escalation, and maintain consistency across long shifts. In practice, this means repeatedly executing similar investigative micro-workflows: check alert context, verify if it happened before, correlate with related events, identify plausible benign explanations, and only then formulate an assessment. The repetitive nature of this loop does not make it intellectually stimulant. On the contrary, it increases cognitive fatigue and raises the risk of inconsistent decisions.
+Within this environment, the L1 analyst role is operationally critical and structurally overloaded. The analyst is expected to triage quickly, collect sufficient evidence, avoid premature escalation, and maintain consistency across long shifts. In practice, this means repeatedly executing similar investigative micro-workflows: check alert context, verify whether it happened before, correlate with related events, identify plausible benign explanations, and only then formulate an assessment. The repetitive nature of this loop does not make it intellectually stimulating. On the contrary, it increases cognitive fatigue and raises the risk of inconsistent decisions.
 
 Alert fatigue therefore emerges as both a human and system-design problem. It is human because attention and short-term reasoning are finite resources. It is architectural because deterministic pipelines degrade when data sources mutate: field names change, detection logic drifts, and procedural rules require continuous maintenance. As the number of integrations grows, maintenance cost tends to increase faster than linearly, while investigative quality becomes increasingly dependent on tacit analyst knowledge.
 
@@ -12,14 +12,14 @@ For this reason, the thesis frames automation as support for investigative reaso
 
 ### 2.2 Wazuh: Platform Role, Components, and Investigative Value
 
-Wazuh is an open sorce SIEM heavily used in the industry. A SIEM is not a single service but the central repository of: endpoint data, network logging and third party tools (XDR, NDR, ecc.). Wazuh is composed by 3 main component; the manager, the indexer and the dashboard.
-The Manager functions as the brain, it collects log from the agent installed on endpoints and server, decode them and process them following built-in and custom rules.
-The Indexer, based on Opensearch, an open source fork of ElasticSearch, allows the analyst to rapidly query huge numbers of events, using custom filters to retrieve only relevant data.
-The Dashboard is the GUI element that support data visualization in a varaiety of forms: data table, graphs and custom visualizations.
+Wazuh is an open-source SIEM widely used in the industry. A SIEM is not a single service but a central platform that ingests endpoint data, network logs, and signals from third-party tools (for example XDR and NDR solutions). Wazuh is composed of three main components: the manager, the indexer, and the dashboard.
+The Manager functions as the core coordination component: it collects logs from agents installed on endpoints and servers, decodes them, and processes them using built-in and custom rules.
+The Indexer, based on OpenSearch (an open-source fork of Elasticsearch), allows analysts to query large volumes of events with custom filters to retrieve only relevant data.
+The Dashboard is the GUI component that supports data visualization in a variety of forms, including data tables, graphs, and custom views.
 
 At infrastructure level, two interfaces are relevant and must be clearly separated. The Wazuh Manager API (port 55000) is oriented to management operations and is not the analytical query surface used by the agent. The investigative query surface is the Wazuh Indexer (OpenSearch, port 9200), where events and alerts are indexed and searchable through OpenSearch DSL.
 
-From a data perspective, Wazuh provides two practically distinct index families, the index pattern wazuh-archives-* is the omni comprehensive analytical space, because it contains broad event telemetry, including the contextual traces needed for enrichment and correlation. The index pattern wazuh-alerts-* is used only when the workflow explicitly needs fired-alert documents. This choice allows the agent to move from alert-level visibility to event-level reconstruction without changing platform.
+From a data perspective, Wazuh provides two practically distinct index families. The index pattern `wazuh-archives-*` is the primary analytical space because it contains broad event telemetry, including the contextual traces needed for enrichment and correlation. The index pattern `wazuh-alerts-*` is used only when the workflow explicitly needs fired-alert documents. This choice allows the agent to move from alert-level visibility to event-level reconstruction without changing platform.
 
 Wazuh also introduces a key technical challenge: decoder-dependent field variability. Different log sources expose equivalent concepts through different paths, such as source IP or username fields represented under distinct schemas. Querying the wrong field often yields empty results without explicit errors, which can be misinterpreted as benign absence of activity. The implementation addresses this by using decoder-specific analysis skills rather than one generic skill. In this way, each investigative primitive is aligned with the field semantics of the originating source, and missing fields are explicitly signaled through note fields rather than silently ignored.
 
@@ -40,7 +40,7 @@ Another relevant point is control of output structure. Free-form completions are
 
 LangGraph is the orchestration framework used to encode the agent workflow as an explicit state machine. In this context, a graph is not a visual convenience but the runtime that defines node responsibilities, state transitions, and allowable execution paths.
 
-The project uses LangGraph to define a typed pipeline state and a controlled transition chain. The graph is composed of these nodes: START -> Analyst -> Evaluator -> Formatter -> Reflector -> END. Because transitions are explicit, adding or removing a node is a design decision visible at architecture level, easy to impement and document.
+The project uses LangGraph to define a typed pipeline state and a controlled transition chain. The graph is composed of these nodes: START -> Analyst -> Evaluator -> Formatter -> Reflector -> END. Because transitions are explicit, adding or removing a node is a design decision visible at architecture level, easy to implement and document.
 
 This matters for three reasons. First, explainability: each node corresponds to a single conceptual function, which can be documented and reviewed. Second, testability: node behavior can be validated independently with mocked dependencies and deterministic state inputs. Third, maintainability: logic can be localized, for example keeping analytical knowledge inside the Analyst rather than scattering it across components.
 
@@ -66,7 +66,7 @@ The practical effect is reduced effort in recurring scenarios and a more consist
 
 ### 2.6 Explainability and Auditability
 
-Explainability in this project is not treated as a business narrative. It's built into the architecture, implemented through typed interfaces, fixed report schema, and structured execution logging. Every pipeline run produces human readable traces that capture what was called, what was retrieved, and how outcomes were judged.
+Explainability in this project is not treated as a business narrative. It is built into the architecture through typed interfaces, a fixed report schema, and structured execution logging. Every pipeline run produces human-readable traces that capture what was called, what was retrieved, and how outcomes were judged.
 
 Auditability is further reinforced by preserving full analyst and evaluator artifacts in the final report payload, together with a run identifier stamped across structured logs. This design enables later review, metric extraction, and future improvements without changing core runtime behavior.
 
@@ -86,10 +86,10 @@ The following technologies constitute the effective stack used by the implemente
 | Python Dotenv (`python-dotenv`) | Environment variable loading for credentials and runtime configuration | Keeps sensitive values external to code and supports reproducible local execution |
 | Pytest (`pytest`) | Automated verification of skills, clients, pipeline behavior, and regression safety | Ensures implementation claims are backed by repeatable tests across components |
 
-In addition to libraries, two infrastructural elements are part of the practical stack: a Windows Domain Controller and a Windows client instrumented with Wazuh agents. These hosts generate the heterogeneous security events that motivate decoder-specific skill design and provide realistic telemetry for evaluation. It's also present the syslog stream of an OPNsense that function as the router and allows to investigate network traces
+In addition to libraries, two infrastructural elements are part of the practical stack: a Windows Domain Controller and a Windows client instrumented with Wazuh agents. These hosts generate the heterogeneous security events that motivate decoder-specific skill design and provide realistic telemetry for evaluation. The environment also includes syslog telemetry from an OPNsense router to support investigation of network traces.
 
-### 2.8 A Picture of the IT Infrastructure 
+### 2.8 IT Infrastructure Overview
 
-Below a schema of the IT infrastructure:
+Below is a schema of the IT infrastructure:
 
 ![alt text](IT_schema.drawio.png)

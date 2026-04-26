@@ -2,9 +2,9 @@
 
 ### 3.1 Engineering-Research Methodology
 
-The methodological approach adopted in this thesis is engineering-research with iterative validation. The objective is not to formulate a purely theoretical model of SOC automation, but to design, implement, and empirically evaluate an operational model under realistic constraints. The research process follows a build-measure-refine logic where architectural decisions are progressively validated through tests and controlled executions.
+The methodological approach adopted in this thesis is engineering-research with iterative validation. The objective is not to formulate a purely theoretical model of SOC automation, but to design, implement, and empirically evaluate an operational system under realistic constraints. The research process follows a build-measure-refine logic where architectural decisions are progressively validated through tests and controlled executions.
 
-The development strategy is intentionally incremental, more on this in chapter 5, instead of implementing a full autonomous pipeline in one step, the system is constructed in bounded phases, each delivering a concrete capability with explicit interfaces and dedicated tests. This staged process reduces coupling risk, supports reproducibility, and allows design tradeoffs to be evaluated while the system is still modular. 
+The development strategy is intentionally incremental. Instead of implementing a full autonomous pipeline in one step, the system is constructed in bounded phases, each delivering a concrete capability with explicit interfaces and dedicated tests (detailed further in Chapter 5). This staged process reduces coupling risk, supports reproducibility, and allows design tradeoffs to be evaluated while the system is still modular.
 
 A second methodological principle is explainability-by-design. Components are selected and composed so that the full analytical path can be inspected: which skill was called, which query was executed, which evidence was retrieved, and how the final verdict was justified. This principle directly influences technology selection (Python modular design, LangGraph explicit state transitions, structured JSON logging) and prevents hidden control paths that would weaken methodological transparency.
 
@@ -13,10 +13,10 @@ A second methodological principle is explainability-by-design. Components are se
 The functional requirements are derived from the investigative workflow expected from an L1 SOC analyst and from the architecture implemented in the project.
 
 1. Alert intake and context initialization
-The system must accept a Wazuh alert together with a specific prompt, coming from the SOAR in a real scenario. It then initialize the context containing source metadata, decoder information, and a SOAR-oriented investigative prompt.
+The system must accept a Wazuh alert together with a contextual prompt from the SOAR layer. It then initializes a context containing source metadata, decoder information, and an investigative prompt.
 
 2. Skill-based evidence enrichment
-The analyst must invoke compatible skills to retrieve contextual evidence (for example IP, username, and rules triggered) and summarize each skill outcome in analyst-readable form.
+The analyst must invoke compatible skills to retrieve contextual evidence (for example IP activity, username activity, and triggered rules) and summarize each skill outcome in analyst-readable form.
 
 3. Decoder-aware skill selection
 The system must select analysis skills according to decoder-specific compatibility to avoid silent failures caused by field-schema mismatch.
@@ -41,7 +41,7 @@ These requirements define the minimum capabilities needed for practical L1 suppo
 
 ### 3.3 Non-Functional Requirements
 
-In addition to functional capabilities, the system must satisfy non-functional properties useful in real operations.
+In addition to functional capabilities, the system must satisfy non-functional properties relevant to real operations.
 
 1. Reliability
 The system must fail predictably, propagate error information, and avoid hidden failure modes.
@@ -65,9 +65,9 @@ Credentials and environment-specific parameters must remain externalized through
 
 The system design is shaped by explicit data and interface constraints coming from both the security component and the agent architecture.
 
-At telemetry level, Wazuh data is schema-heterogeneous across decoders. Equivalent fields may appear under different name (eg. srcIp and src_ip or location and origin). This means that query correctness is source-dependent; a syntactically valid query can still be semantically wrong for a given decoder. The architecture addresses this through decoder-specific analysis skills and explicit "field not present" notes when a source does not expose required attributes.
+At telemetry level, Wazuh data is schema-heterogeneous across decoders. Equivalent concepts may appear under different field names (for example `srcIp` vs `src_ip`). This means that query correctness is source-dependent; a syntactically valid query can still be semantically wrong for a given decoder. The architecture addresses this through decoder-specific analysis skills and explicit "field not present" notes when a source does not expose required attributes.
 
-At query interface level, logs retrieval is constrained to Wazuh Indexer/OpenSearch (port 9200). The default index family is wazuh-archives-* for broad event context, with wazuh-alerts-* used selectively for alert-level logs.
+At query interface level, log retrieval is constrained to Wazuh Indexer/OpenSearch (port 9200). The default index family is `wazuh-archives-*` for broad event context, with `wazuh-alerts-*` used selectively for alert-level logs.
 
 At agent interface level, each skill must comply with a stable contract: typed input/output behavior, JSON-serialisable data payload, bounded summary, and execution through the public wrapper rather than private internals. This preserves consistency across heterogeneous skills and supports standard orchestration.
 
