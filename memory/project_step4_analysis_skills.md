@@ -14,6 +14,18 @@ Three analysis skills for the `windows_eventchannel` decoder, in `skills/analysi
 | `WindowsUsernameLookupSkill` | `windows_username_lookup.py` | `USERNAME` |
 | `WindowsRuleLookupSkill` | `windows_rule_lookup.py` | `RULE_ID` |
 
+Additional decoder-specific analysis skills (OPNSense traffic source):
+
+| Skill | File | InputType |
+|---|---|---|
+| `OpnsenseHostBehaviorLookupSkill` | `opnsense_host_behavior_lookup.py` | `IP_ADDRESS` |
+| `OpnsenseMultiportContactLookupSkill` | `opnsense_multiport_contact_lookup.py` | `IP_ADDRESS` |
+| `OpnsensePairPortTimelineLookupSkill` | `opnsense_pair_port_timeline_lookup.py` | `IP_ADDRESS` |
+
+These OPNSense skills target traffic-style fields (`data.srcip`, `data.dstip`,
+`data.dstport`) with explicit `decoder.name=opnsense` filters and aggregation-first
+outputs tailored for scan-pattern analysis.
+
 Shared aggregation helpers in `skills/analysis/_helpers.py`:
 `fmt_timestamp`, `parse_histogram`, `compute_peak_hour`, `compute_active_days`,
 `compute_off_hours`, `parse_top_terms`, `parse_top_rules`, `parse_top_ports`.

@@ -208,6 +208,12 @@ the corresponding `_note` field.**
 Currently implemented log sources (expand as the lab grows):
 - `windows_eventchannel` — DC and Windows client events
 - `wazuh` — Wazuh internal / manager alerts
+- `opnsense` — firewall traffic events
+
+Current OPNSense analysis skills:
+- `opnsense_host_behavior_lookup` — one source IP → destination hosts contacted in last 4h (count per host)
+- `opnsense_multiport_contact_lookup` — one source IP → destination hosts contacted on >=5 distinct ports
+- `opnsense_pair_port_timeline_lookup` — source/destination pair → per-port per-minute event aggregation
 
 ### Layered I/O
 - Analysis skills → `QueryBuilderSkill` → `QueryExecutorSkill` → `WazuhIndexerClient`
@@ -249,14 +255,3 @@ raw_analyst_doc, raw_evaluator_doc   ← full audit trail, preserved verbatim
 - No bare `except` — catch specific exceptions or `except Exception as exc`
 - Every new skill gets a test file in `tests/` before being considered done
 - Run `python -m pytest tests/ -v` before every commit
-
----
-
-## Thesis chapter map (for reference)
-
-1. **Introduction** — SOC analyst workload, alert fatigue, LLM agents as partial solution
-2. **Background** — Wazuh architecture, LLM tool-use, ReAct / LangGraph patterns
-3. **System design** — skill interface, registry, agent loop, knowledge store
-4. **Implementation** — each build step, decisions, tradeoffs
-5. **Evaluation** — detection rate, false positive rate, query reuse rate, response time
-6. **Conclusion** — limitations, future work (multi-SIEM, fine-tuning on stored queries)

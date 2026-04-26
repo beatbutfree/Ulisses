@@ -9,6 +9,9 @@ _KNOWN_SKILL_NAMES = {
     "windows_ip_lookup",
     "windows_username_lookup",
     "windows_rule_lookup",
+    "opnsense_host_behavior_lookup",
+    "opnsense_multiport_contact_lookup",
+    "opnsense_pair_port_timeline_lookup",
 }
 
 
@@ -20,7 +23,7 @@ def test_discover_finds_all_known_skills():
 
 def test_discover_returns_concrete_skill_subclasses():
     classes = discover_skill_classes()
-    assert len(classes) >= 3
+    assert len(classes) >= 6
     for cls in classes:
         assert issubclass(cls, Skill)
         assert cls is not Skill
